@@ -1,5 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as plt
+from .ctfvisualizer import CTFRenderer
 
 class CTFSim:
     def __init__(self, N, render=False):
@@ -21,6 +21,7 @@ class CTFSim:
         self.max_vel = 0.5        # max velocity of the robots
         self.radius = 0.5
         self.render = render
+        self.time_limit = 125
 
         self.N = N
         self.h = self.height_margin + self.height_expansion * N
@@ -28,7 +29,13 @@ class CTFSim:
         self.red_flag_pos = np.array([self.flag_margin_dist, self.h/2])
         self.blue_flag_pos = np.array([self.l - self.flag_margin_dist, self.h/2])
 
+        if render:
+            self.renderer = CTFRenderer(N, self.l, self.h)
+
     def reset(self):
+        ''' Returns a tuple
+        Resets the environment to its initial condition
+        '''
         # Reset the position and velocity of agents
         red_positions = np.array(
             [(self.agent_lr_margin, self.agent_tb_margin + \
@@ -39,14 +46,16 @@ class CTFSim:
         self.agent_positions = np.vstack([red_positions, blue_positions])
         # Initialize agent velocities to be zero
         self.agent_velocity = np.zeros((self.N*2, 2))
+        self.step_count = 0
         if self.render:
-            self.render_field(initial_render=True)
+            self.renderer.render_step(self.agent_positions, 
+                                      (self.red_flag_pos, self.blue_flag_pos))
 
-        return self.pack_observation(), False, False, False
+        return (self.pack_observation(), False, False, False)
 
 
     def apply_control(self, controls):
-        '''
+        ''' Returns a 2D numpy array
         Computes the position of agents given the current control
         Returns the projected position of the agents (ignoring collisions)
         '''
@@ -57,7 +66,7 @@ class CTFSim:
         return positions
 
     def pack_observation(self):
-        '''
+        ''' Returns a list of tuples
         Pack the observations for all agents
         Return:
             observation - an array where each element is the observation of
@@ -86,7 +95,7 @@ class CTFSim:
 
 
     def step(self, controls):
-        '''
+        ''' Returns a tuple
         One discrete step of the simulation; moves the robot according to their
         control
         -----------------------
@@ -96,10 +105,8 @@ class CTFSim:
                     blue control
 
         '''
-
-        #self.red_positions = self.red_positions + controls[:self.N, :]
-        #self.blue_positions = self.blue_positions + controls[self.N:, :]
-
+        # Corrupt the controls with a small amount of noise
+        controls = controls + (np.random.random((self.N * 2, 2)) - 0.5) / 20
         # Clip positions to be inside the walls
         for i in range(self.N):
             pos = self.apply_control(controls)
@@ -114,7 +121,7 @@ class CTFSim:
         for i in range(self.N):
             for j in range(self.N, self.N*2):
                 if dists_table[i,j] < self.radius * 2:
-                    print('collision!')
+                    #print('collision!')
                     if self.agent_positions[i,0] < self.l / 2:
                         # Collision is in the red half of the court
                         pos[j] = \
@@ -135,7 +142,8 @@ class CTFSim:
 
         # Render if asked
         if self.render:
-            self.render_field()
+            self.renderer.render_step(self.agent_positions, 
+                                      (self.red_flag_pos, self.blue_flag_pos))
 
         # Check for whether the game has ended
         dist_to_red_flag = np.linalg.norm(
@@ -148,29 +156,9 @@ class CTFSim:
             axis=1)
         blue_flag_captured = np.any(dist_to_blue_flag < self.radius)
 
-        game_ended = red_flag_captured or blue_flag_captured
+        self.step_count += 1
+        game_ended = red_flag_captured or blue_flag_captured or \
+            self.step_count >= self.time_limit
 
         return observation, game_ended, \
             red_flag_captured, blue_flag_captured
-       
-    def render_field(self, initial_render=False, duration=0.05):
-        '''
-        Renders the field and the agents in the field
-        '''
-        plt.clf()
-        plt.axis([0, self.l, 0, self.h])
-        plt.scatter(self.agent_positions[:self.N,0],
-                    self.agent_positions[:self.N,1], \
-                    marker='o', color='r')
-        plt.scatter(self.agent_positions[self.N:,0],
-                    self.agent_positions[self.N:,1], \
-                    marker='o', color='b')
-        plt.scatter(self.red_flag_pos[0], self.red_flag_pos[1], \
-                    marker='x', color='r')
-        plt.scatter(self.blue_flag_pos[0], self.blue_flag_pos[1], \
-                    marker='x', color='b')
-        if initial_render:
-            plt.draw()
-        else:
-            plt.pause(duration)
-
