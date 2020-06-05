@@ -3,7 +3,7 @@ class Agent:
     Abstract class of agents.
     '''
     def __init__(self, num_players):
-        self.num_players = 0
+        self.num_players = None
 
     def get_action(self, observation):
         '''

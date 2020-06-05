@@ -10,19 +10,23 @@ from gameanalysis import rsgame, paygame, nash
 
 #---------------------------Simulation script---------------------
 class CTFEqFinder:
-    def __init__(self, num_players, num_meta_strategies, symm=False):
+    def __init__(self, num_players, num_meta_strategies, sim=None, symm=False):
         self.num_players = num_players
         self.ms = num_meta_strategies
-        self.sim = CTFSim(num_players, render=False)
+        if sim is None:
+            self.sim = CTFSim(num_players, render=False)
+        else:
+            self.sim = sim
 
-    def find_eq(self):
-        players = [self.num_players, self.num_players]
+    def find_eq(self, n=1):
+        players = self.num_players
         strats = [self.ms] * len(players)
         eg = rsgame.empty(players, strats)
         profs = eg.all_profiles()
         pays = []
         for p in profs:
-            pays.append(utils.estimate_payoff(self.sim, p))
+            pays.append(
+                utils.estimate_payoff(self.sim, p, self.num_players, n=n))
         pays = np.array(pays)
         pays[profs==0] = 0
         pg = paygame.game(players, strats, profs, pays)

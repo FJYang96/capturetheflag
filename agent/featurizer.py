@@ -33,7 +33,7 @@ def num_teammate_offense(self_pos, teammate_pos, enemy_flag_pos):
     '''
     teammate_dist_to_flag = np.linalg.norm(enemy_flag_pos - teammate_pos, axis=1)
     if_teammate_closer = \
-        teammate_dist_to_flag - dist_to_enemy_flag(self_pos, enemy_flag_pos)
+        teammate_dist_to_flag < dist_to_enemy_flag(self_pos, enemy_flag_pos)
     return np.sum(if_teammate_closer)
 
 def num_opponent_offense(self_flag_pos, enemy_pos, enemy_flag_pos):

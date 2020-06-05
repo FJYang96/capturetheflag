@@ -36,7 +36,7 @@ def agents_from_assignment(num_players, assignment):
 def agents_from_profile(profile, symm=True):
     ''' Returns a list of Agents
     '''
-    num_players = np.sum(profile) / 2
+    num_players = np.sum(profile)
     if symm:
         assn = assignment_from_symmetric_profile(profile)
         return agents_from_assignment(num_players, assn)
@@ -45,20 +45,20 @@ def agents_from_profile(profile, symm=True):
         assn = assignment_from_symmetric_profile(profile)
         return agents_from_assignment(assn)
 
-def simulate_profile(sim, profile):
+def simulate_profile(sim, profile, num_players):
     ''' Returns an 1D array
     Wrapper for the simulating a profile with CTFSim. Returns the payoffs of a
     profile
     '''
-    num_players = int(np.sum(profile) / 2)
     S = int(len(profile) / 2)
     red_agents = agents_from_profile(profile[:S])
     blue_agents = agents_from_profile(profile[S:])
     agents = red_agents + blue_agents
 
     observation, game_ended, _, _ = sim.reset()
+    N = np.sum(num_players)
     while not game_ended:
-        controls = np.zeros((num_players * 2, 2))
+        controls = np.zeros((N, 2))
         for i, a in enumerate(agents):
             controls[i] = a.get_action(observation[i])
         observation, game_ended, blue_win, red_win = sim.step(controls)
@@ -71,28 +71,47 @@ def simulate_profile(sim, profile):
         payoffs[S:] = 1
     return payoffs
 
-def count_effective_simulation_steps(sim, profile):
-    num_players = int(np.sum(profile) / 2)
+def count_effective_simulation_steps(sim, profile, num_players):
     S = int(len(profile) / 2)
     red_agents = agents_from_profile(profile[:S])
     blue_agents = agents_from_profile(profile[S:])
     agents = red_agents + blue_agents
     observation, game_ended, _, _ = sim.reset()
     count = 0
+    N = np.sum(num_players)
     while not game_ended:
         count += 1
-        controls = np.zeros((num_players * 2, 2))
+        controls = np.zeros((N, 2))
         for i, a in enumerate(agents):
             controls[i] = a.get_action(observation[i])
         observation, game_ended, blue_win, red_win = sim.step(controls)
     return count
 
-def estimate_payoff(sim, profile, n=10):
+def estimate_payoff(sim, profile, num_players, n=10):
     ''' Returns an 1D array
     Wrapper for simulating a profile multiple times and averaging payoff
     '''
     avg_pay = np.zeros(profile.shape)
     for i in range(n):
-        avg_pay = avg_pay + simulate_profile(sim, profile)
+        avg_pay = avg_pay + simulate_profile(sim, profile, num_players)
     avg_pay = avg_pay / n
     return avg_pay
+
+def simulate_episode(sim, profile, num_players):
+    ''' Returns a ctflogger
+    Wrapper for the simulating a profile with CTFSim. Returns the payoffs of a
+    profile
+    '''
+    S = int(len(profile) / 2)
+    red_agents = agents_from_profile(profile[:S])
+    blue_agents = agents_from_profile(profile[S:])
+    agents = red_agents + blue_agents
+
+    observation, game_ended, _, _ = sim.reset()
+    N = np.sum(num_players)
+    while not game_ended:
+        controls = np.zeros((N, 2))
+        for i, a in enumerate(agents):
+            controls[i] = a.get_action(observation[i])
+        observation, game_ended, blue_win, red_win = sim.step(controls)
+    return sim.get_logger()

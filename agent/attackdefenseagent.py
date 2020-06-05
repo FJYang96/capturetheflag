@@ -12,8 +12,8 @@ class AttackDefenseAgent(TwoTierAgent):
     '''
     def __init__(self,
                  num_players,
-                 pull_strength=2, 
-                 push_strength=0.3,
+                 pull_strength=3, 
+                 push_strength=0.1,
                  enemy_attraction=0.7):
         super().__init__(num_players)
         self.pull_strength = pull_strength

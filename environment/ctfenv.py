@@ -1,52 +1,91 @@
 import numpy as np
 from .ctfvisualizer import CTFRenderer
+from .io import ctflogger
 
 class CTFSim:
-    def __init__(self, N, render=False):
+    def __init__(self,
+                 num_players, 
+                 max_vels = None,
+                 initial_pos=None,
+                 initial_vels=None,
+                 time_limit = 150,
+                 noise_var = 0.25,
+                 render=False):
         '''
         Initialize the simulator; place everyone in position etc.
         ----------------------
         Params:
-            N - number of players on each team
+            N - (2-tuple) number of players on each team
+            max_vels - (1D array) max velocity of each robot
+            initial_position - (2D array) initial position for each robot
+            initial_velocity - (2D array) initial velocity for each robot
+            render - (bool) whether to render the animation for this simulation
         '''
         # Field configuration
+        self.num_players = num_players
+        self.N = np.sum(num_players)
         self.height_margin = 10      # starting height of the field
         self.length_margin = 50      # starting length of the field
         self.height_expansion = 4    # height gain of the field per additional agent
         self.length_expansion = 1    # length gain of the field per additional agent
         self.flag_margin_dist = 5    # distance from flag to left/right sides
-        self.agent_lr_margin = 10    # distance from agent to left/right sides
-        self.agent_tb_margin = 7     # distance from agent to top/bottom sides
-        self.agent_distance = 4      # distance between agents
-        self.max_vel = 0.5        # max velocity of the robots
-        self.radius = 0.5
-        self.render = render
-        self.time_limit = 125
-
-        self.N = N
-        self.h = self.height_margin + self.height_expansion * N
-        self.l = self.length_margin + self.length_expansion * N
+        self.h = self.height_margin + self.height_expansion * self.N / 2
+        self.l = self.length_margin + self.length_expansion * self.N / 2
         self.red_flag_pos = np.array([self.flag_margin_dist, self.h/2])
         self.blue_flag_pos = np.array([self.l - self.flag_margin_dist, self.h/2])
+        self.flag_positions = (self.red_flag_pos, self.blue_flag_pos)
+        self.radius = 0.5
 
-        if render:
-            self.renderer = CTFRenderer(N, self.l, self.h)
+        # Set the initial position and velocity of the agents
+        self.agent_lr_margin = 10    # distance from agent to left/right sides
+        self.agent_tb_margin = 7     # distance from agent to top/bottom sides
+
+        if initial_pos is None:
+            red_distance = (self.h - self.agent_tb_margin) / num_players[0]
+            blue_distance = (self.h - self.agent_tb_margin) / num_players[1]
+            red_positions = np.array(
+                [(self.agent_lr_margin, self.agent_tb_margin + \
+                  i * red_distance) for i in range(self.num_players[0])])
+            blue_positions = np.array(
+                [(self.l-self.agent_lr_margin, self.agent_tb_margin \
+                  + i * blue_distance) for i in range(self.num_players[1])])
+            self.initial_pos = np.vstack([red_positions, blue_positions])
+        else:
+            self.initial_pos = initial_pos
+
+        if initial_vels is None:
+            self.initial_vels = np.zeros((self.N, 2))
+        else:
+            self.initial_vels = initial_vels
+
+        # Set the maximum velocity of the agents
+        if max_vels is None:
+            self.max_vels = 0.5
+        else:
+            self.max_vels = max_vels
+
+        # Set simulation step limit
+        self.time_limit = time_limit
+
+        # Set control noise
+        self.noise_var = noise_var
+
+        # Set whether to render the simulation or not
+        self.render = render
+        if self.render:
+            self.renderer = CTFRenderer(num_players, self.l, self.h)
+
+        # initialize a logger
+        self.logger = ctflogger(num_players, self.l, self.h, self.flag_positions)
 
     def reset(self):
         ''' Returns a tuple
         Resets the environment to its initial condition
         '''
-        # Reset the position and velocity of agents
-        red_positions = np.array(
-            [(self.agent_lr_margin, self.agent_tb_margin + \
-              i * self.agent_distance) for i in range(self.N)])
-        blue_positions = np.array(
-            [(self.l-self.agent_lr_margin, self.agent_tb_margin \
-              + i * self.agent_distance) for i in range(self.N)])
-        self.agent_positions = np.vstack([red_positions, blue_positions])
-        # Initialize agent velocities to be zero
-        self.agent_velocity = np.zeros((self.N*2, 2))
+        self.agent_positions = self.initial_pos.copy()
+        self.agent_velocity = self.initial_vels.copy()
         self.step_count = 0
+        self.logger.clear_history()
         if self.render:
             self.renderer.render_step(self.agent_positions, 
                                       (self.red_flag_pos, self.blue_flag_pos))
@@ -61,7 +100,7 @@ class CTFSim:
         '''
         self.agent_velocity = self.agent_velocity + controls
         self.agent_velocity = \
-            self.agent_velocity.clip(-self.max_vel, self.max_vel)
+            self.agent_velocity.clip(-self.max_vels, self.max_vels)
         positions = self.agent_positions + self.agent_velocity
         return positions
 
@@ -77,16 +116,16 @@ class CTFSim:
         '''
         # TODO: vectorize the code
         observation = []
-        red_positions = self.agent_positions[:self.N]
-        blue_positions = self.agent_positions[self.N:]
+        red_positions = self.agent_positions[:self.num_players[0]]
+        blue_positions = self.agent_positions[self.num_players[0]:]
         # Append red agents' observations
-        for i in range(self.N):
+        for i in range(self.num_players[0]):
             observation.append(
                 (self.agent_positions[i], self.red_flag_pos, self.blue_flag_pos,
                  red_positions, blue_positions)
             )
         # Append blue agents' observations
-        for i in range(self.N, self.N*2):
+        for i in range(self.num_players[0], self.N):
             observation.append(
                 (self.agent_positions[i], self.blue_flag_pos, self.red_flag_pos,
                  blue_positions, red_positions)
@@ -106,9 +145,10 @@ class CTFSim:
 
         '''
         # Corrupt the controls with a small amount of noise
-        controls = controls + (np.random.random((self.N * 2, 2)) - 0.5) / 20
+        noise = np.random.normal(0, self.noise_var, size=(self.N, 2))
+        controls = controls + noise
         # Clip positions to be inside the walls
-        for i in range(self.N):
+        for i in range(int(self.N/2)):
             pos = self.apply_control(controls)
             pos[:, 0] = pos[:, 0].clip(0, self.l)
             pos[:, 1] = pos[:, 1].clip(0, self.h)
@@ -118,8 +158,8 @@ class CTFSim:
 
         # Check for collision and apply game dynamics
         # TODO: vectorize the code here
-        for i in range(self.N):
-            for j in range(self.N, self.N*2):
+        for i in range(self.num_players[0]):
+            for j in range(self.num_players[0], self.N):
                 if dists_table[i,j] < self.radius * 2:
                     #print('collision!')
                     if self.agent_positions[i,0] < self.l / 2:
@@ -147,12 +187,12 @@ class CTFSim:
 
         # Check for whether the game has ended
         dist_to_red_flag = np.linalg.norm(
-            self.agent_positions[self.N:, :] - np.array(self.red_flag_pos),
+            self.agent_positions[self.num_players[0]:, :] - np.array(self.red_flag_pos),
             axis=1)
         red_flag_captured = np.any(dist_to_red_flag < self.radius)
 
         dist_to_blue_flag = np.linalg.norm(
-            self.agent_positions[:self.N, :] - np.array(self.blue_flag_pos),
+            self.agent_positions[:self.num_players[0], :] - np.array(self.blue_flag_pos),
             axis=1)
         blue_flag_captured = np.any(dist_to_blue_flag < self.radius)
 
@@ -160,5 +200,10 @@ class CTFSim:
         game_ended = red_flag_captured or blue_flag_captured or \
             self.step_count >= self.time_limit
 
+        self.logger.log_state(self.agent_positions)
+
         return observation, game_ended, \
             red_flag_captured, blue_flag_captured
+
+    def get_logger(self):
+        return self.logger
