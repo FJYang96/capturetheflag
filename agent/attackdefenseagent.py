@@ -13,8 +13,8 @@ class AttackDefenseAgent(TwoTierAgent):
     def __init__(self,
                  num_players,
                  pull_strength=3, 
-                 push_strength=0.1,
-                 enemy_attraction=0.7):
+                 push_strength=0.2,
+                 enemy_attraction=0.8):
         super().__init__(num_players)
         self.pull_strength = pull_strength
         self.push_strength = push_strength
@@ -56,10 +56,12 @@ class AttackDefenseAgent(TwoTierAgent):
         Computes the control action for defending.
         Side effect: assigns self.meta_strategy_target
         '''
-        self_pos, self_flag_pos, _, _, enemy_pos = observation
+        self_pos, self_flag_pos, _, teammate_pos, enemy_pos = observation
         assignment = self.assign_opponent_to_defend(observation)
         enemy_pull = enemy_pos[assignment] - self_pos
+        # Pulled towards the goal
         goal_pull = self_flag_pos - self_pos
+        # Sum the control
         control = self.alpha * enemy_pull + (1 - self.alpha) * goal_pull
         self.meta_strategy_target = assignment
         return control
@@ -80,7 +82,7 @@ class DynamicADAgent(AttackDefenseAgent):
                  featurizer,
                  parameters,
                  pull_strength=2,
-                 push_strength=0.3,
+                 push_strength=0.15,
                  enemy_attraction=0.7):
         super().__init__(num_players, pull_strength, push_strength, 
                          enemy_attraction)

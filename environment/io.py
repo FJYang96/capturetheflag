@@ -45,8 +45,7 @@ class ctflogger:
         self.load_from_file(filename)
         self.render_history()
 
-    def mp4_from_file(self, history_dir, gif_dir):
-        self.load_from_file(history_dir)
+    def mp4_from_file(self, gif_dir):
         if self.renderer is None:
             self.renderer = CTFRenderer(self.num_players, self.l, self.h)
         self.renderer.mp4_from_history(

@@ -4,12 +4,12 @@ from .io import ctflogger
 
 class CTFSim:
     def __init__(self,
-                 num_players, 
-                 max_vels = None,
+                 num_players,
+                 max_vels=None,
                  initial_pos=None,
                  initial_vels=None,
-                 time_limit = 150,
-                 noise_var = 0.25,
+                 time_limit=150,
+                 noise_var=0.25,
                  render=False):
         '''
         Initialize the simulator; place everyone in position etc.
@@ -120,15 +120,19 @@ class CTFSim:
         blue_positions = self.agent_positions[self.num_players[0]:]
         # Append red agents' observations
         for i in range(self.num_players[0]):
+            teammate_ind = np.ones(self.num_players[0], dtype=bool)
+            teammate_ind[i] = False
             observation.append(
                 (self.agent_positions[i], self.red_flag_pos, self.blue_flag_pos,
-                 red_positions, blue_positions)
+                 red_positions[teammate_ind], blue_positions)
             )
         # Append blue agents' observations
         for i in range(self.num_players[0], self.N):
+            teammate_ind = np.ones(self.num_players[1], dtype=bool)
+            teammate_ind[i-self.num_players[0]] = False
             observation.append(
                 (self.agent_positions[i], self.blue_flag_pos, self.red_flag_pos,
-                 blue_positions, red_positions)
+                 blue_positions[teammate_ind], red_positions)
             )
         return observation
 
@@ -148,10 +152,9 @@ class CTFSim:
         noise = np.random.normal(0, self.noise_var, size=(self.N, 2))
         controls = controls + noise
         # Clip positions to be inside the walls
-        for i in range(int(self.N/2)):
-            pos = self.apply_control(controls)
-            pos[:, 0] = pos[:, 0].clip(0, self.l)
-            pos[:, 1] = pos[:, 1].clip(0, self.h)
+        pos = self.apply_control(controls)
+        pos[:, 0] = pos[:, 0].clip(0, self.l)
+        pos[:, 1] = pos[:, 1].clip(0, self.h)
 
         # Compute the distance between each pair of agents
         dists_table = np.linalg.norm(pos[:,None,:] - pos, axis=2)
@@ -162,20 +165,14 @@ class CTFSim:
             for j in range(self.num_players[0], self.N):
                 if dists_table[i,j] < self.radius * 2:
                     #print('collision!')
-                    if self.agent_positions[i,0] < self.l / 2:
-                        # Collision is in the red half of the court
-                        pos[j] = \
-                            (self.l - self.agent_lr_margin, self.h / 2)
-                        self.agent_velocity[i] = \
-                            (self.agent_velocity[i] + self.agent_velocity[j]) / 2
-                        self.agent_velocity[j] = (0, 0)
-                    else:
-                        # Collision in blue half of the court
-                        pos[i] = \
-                            (self.agent_lr_margin, self.h / 2)
-                        self.agent_velocity[j] = \
-                            (self.agent_velocity[i] + self.agent_velocity[j]) / 2
-                        self.agent_velocity[i] = (0, 0)
+                    # Send blue agent back to starting point
+                    pos[j] = \
+                        (self.l - self.agent_lr_margin, self.h / 2)
+                    self.agent_velocity[j] = (0, 0)
+                    # send red agent back to starting point
+                    pos[i] = \
+                        (self.agent_lr_margin, self.h / 2)
+                    self.agent_velocity[i] = (0, 0)
 
         self.agent_positions = pos
         observation = self.pack_observation()                     

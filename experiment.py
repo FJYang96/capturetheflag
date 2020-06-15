@@ -17,6 +17,7 @@ class CTFEqFinder:
             self.sim = CTFSim(num_players, render=False)
         else:
             self.sim = sim
+        self.game = None
 
     def find_eq(self, n=1):
         players = self.num_players
@@ -30,6 +31,7 @@ class CTFEqFinder:
         pays = np.array(pays)
         pays[profs==0] = 0
         pg = paygame.game(players, strats, profs, pays)
+        self.game = pg
         # Compute the Nash for a couple of times
         nashes = []
         for _ in range(5):
