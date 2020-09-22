@@ -175,11 +175,11 @@ class CTFSim:
                     self.agent_velocity[i] = (0, 0)
 
         self.agent_positions = pos
-        observation = self.pack_observation()                     
+        observation = self.pack_observation()
 
         # Render if asked
         if self.render:
-            self.renderer.render_step(self.agent_positions, 
+            self.renderer.render_step(self.agent_positions,
                                       (self.red_flag_pos, self.blue_flag_pos))
 
         # Check for whether the game has ended
