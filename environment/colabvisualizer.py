@@ -32,7 +32,7 @@ class ColabRenderer:
         '''
         plt.scatter(np.array([7,9])*10, np.array([8,8])*10,
                     marker='x', color='r')
-        plt.scatter(np.array([2])*10, np.array([8])*10,
+        plt.scatter(np.array([2,9])*10, np.array([8,5])*10,
                     marker='x', color='b')
 
     def plot_step(self, agent_positions, clearfig=True):

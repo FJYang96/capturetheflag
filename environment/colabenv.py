@@ -21,7 +21,7 @@ class ColabSim:
             render - (bool) whether to render the animation for this simulation
         '''
         # Field configuration
-        self.num_players = np.array([2,1])
+        self.num_players = np.array([2,2])
         self.N = 3
         self.h = 100
         self.l = 100
@@ -33,18 +33,18 @@ class ColabSim:
 
         self.red_initial_pos = np.array([[10,10],[30,10]])
         self.red_goal_pos = np.array([[70,80],[90,80]])
-        self.blue_initial_pos = np.array([80,15])
-        self.blue_goal_pos = np.array([20,80])
-        self.goal_pos = np.vstack([self.red_goal_pos, self.blue_goal_pos[None, :]])
+        self.blue_initial_pos = np.array([[80,15], [10,50]])
+        self.blue_goal_pos = np.array([[20,80], [90,50]])
+        self.goal_pos = np.vstack([self.red_goal_pos, self.blue_goal_pos])
         # Set initial_pos and initial_vel to be a 5-tuple that corresponds to
         # (bar midpoint x, bar midpoint y, bar angle, adversary x, adversary y)
         # The internal states of the system will always be represented this way
-        self.initial_x = np.array([20,10,0,80,15])
-        self.initial_dx = np.zeros(5)
+        self.initial_x = np.array([20,10,0,80,15,10,50])
+        self.initial_dx = np.zeros(7)
 
         # Set the maximum velocity of the agents
         if max_vels is None:
-            self.max_vels = np.array([1, 1, 0.05, 1, 1])
+            self.max_vels = np.array([1, 1, 0.05, 1, 1, 1, 1])
         else:
             self.max_vels = max_vels
 
@@ -73,9 +73,8 @@ class ColabSim:
         '''
         self.x = self.initial_x
         self.dx = self.initial_dx
-        self.agent_positions = np.array([[1,1],[3,1],[8,1.5]]) * 10
+        self.agent_positions = np.array([[1,1],[3,1],[8,1.5],[1,5]]) * 10
         self.step_count = 0
-        # TODO
         self.agent_vel = np.zeros((2,2))
         #self.logger.clear_history()
         if self.render:
@@ -98,11 +97,12 @@ class ColabSim:
         self.dx[2] = self.dx[2] + self.dt * torque
 
     def x_to_positions(self, x):
-        x_mid, y_mid, theta, x_ad, y_ad = x
+        x_mid, y_mid, theta, x_ad1, y_ad1, x_ad2, y_ad2 = x
         displacement = np.array([np.cos(theta), np.sin(theta)]) * 10
         positions = np.array([[x_mid-displacement[0], y_mid-displacement[1]],
                               [x_mid+displacement[0], y_mid+displacement[1]],
-                              [x_ad, y_ad]])
+                              [x_ad1, y_ad1],
+                              [x_ad2, y_ad2]])
         return positions
 
     def positions_to_x(self, positions):
@@ -127,9 +127,7 @@ class ColabSim:
         positions = self.x_to_positions(self.x)
         # Append red agents' observations
         for i in range(self.num_players[0]):
-            dist_to_adversary = np.linalg.norm(positions[i] - positions[2])
-            enemy_observation = positions[2] \
-                    if dist_to_adversary <= self.ob_limit else None
+            enemy_observation = positions[3-i] #0 observes 3, 1 observes 2
             observation.append((positions[i], positions[1-i], \
                         self.red_goal_pos[i], self.red_goal_pos[1-i], \
                         enemy_observation)
@@ -159,13 +157,16 @@ class ColabSim:
         agent_x = self.positions_to_x(new_pos)
 
         # Adversary control
-        goal_diff = self.blue_goal_pos - self.x[3:]
-        goal_attraction = goal_diff / (np.linalg.norm(goal_diff)**2 + EPS)
-        agent_diff = self.x[3:] - self.x_to_positions(self.x)[:2]
-        agent_avoidance = agent_diff / (np.linalg.norm(agent_diff, axis=1)**2)[:, None]
-        adv_control = goal_attraction * self.adversary_control_weights[0] +\
-                agent_avoidance.sum(0) * self.adversary_control_weights[1]
-        self.dx[3:] = self.dx[3:] + self.dt * adv_control
+        for i in range(2):
+            pos = self.x[3+i*2:3+i*2+2]
+            goal_diff = self.blue_goal_pos[i] - pos
+            goal_attraction = goal_diff / (np.linalg.norm(goal_diff)**2 + EPS)
+            agent_diff = pos - self.x_to_positions(self.x)[:2]
+            agent_avoidance = agent_diff / \
+                    (np.linalg.norm(agent_diff, axis=1)**2)[:, None]
+            adv_control = goal_attraction * self.adversary_control_weights[0] +\
+                    agent_avoidance.sum(0) * self.adversary_control_weights[1]
+            self.dx[3+i*2:3+i*2+2] = self.dx[3+i*2:3+i*2+2] + self.dt * adv_control
         self.dx = self.dx.clip(-self.max_vels, self.max_vels)
 
         # Apply dx to x
@@ -178,7 +179,9 @@ class ColabSim:
         # Compute penalty
         time_penalty = 1
         bar_points = np.array([positions[0], positions[1], self.x[:2]])
-        dist_ad_bar = np.min( np.linalg.norm(bar_points - self.x[3:], axis=1) )
+        dist_ad1_bar = np.min( np.linalg.norm(bar_points - self.x[3:5], axis=1) )
+        dist_ad2_bar = np.min( np.linalg.norm(bar_points - self.x[5:7], axis=1) )
+        dist_ad_bar = min(dist_ad1_bar, dist_ad2_bar)
         distance_penalty = 50 / (dist_ad_bar + EPS)
         penalty = time_penalty + distance_penalty
 
@@ -191,13 +194,16 @@ class ColabSim:
 
         # Check for whether the game has ended
         positions = self.x_to_positions(self.x)
-        dist_to_goal = np.linalg.norm(positions - self.goal_pos, axis=1)[:1]
+        dist_to_goal = np.linalg.norm(positions[:2] - self.goal_pos[:2], axis=1)[:2]
         self.step_count += 1
-        game_ended = np.all(dist_to_goal <= self.radius) or \
-            self.step_count >= self.time_limit
+        game_ended = False
+        if np.all(dist_to_goal <= self.radius * 1.5):
+            game_ended = True
+        elif self.step_count >= self.time_limit:
+            game_ended = True
+            penalty += 500
 
         #self.logger.log_state(self.agent_positions)
-
         return observation, penalty, game_ended
 
     def collision_dynamics(self):
