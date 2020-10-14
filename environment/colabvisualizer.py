@@ -9,6 +9,7 @@ class ColabRenderer:
         self.l = l
         self.h = h
         self.frame_duration = frame_duration
+        plt.style.use('seaborn')
 
     def create_canvas(self):
         pass
@@ -35,7 +36,14 @@ class ColabRenderer:
         plt.scatter(np.array([2,9])*10, np.array([8,5])*10,
                     marker='x', color='b')
 
-    def plot_step(self, agent_positions, clearfig=True):
+    def plot_controls(self, agent_positions, controls):
+        ''' No return
+        Plots the control of the red agents; mostly for debugging purposes
+        '''
+        for i in range(self.num_players[0]):
+            plt.arrow(*agent_positions[i], *controls[i])
+
+    def plot_step(self, agent_positions, controls=None, clearfig=True):
         ''' No return
         Plots the field and the agents in the field
         '''
@@ -44,12 +52,14 @@ class ColabRenderer:
         plt.axis([0, self.l, 0, self.h])
         self.plot_agents(agent_positions)
         self.plot_destination()
+        if not (controls is None):
+            self.plot_controls(agent_positions, controls)
 
-    def render_step(self, agent_positions):
+    def render_step(self, agent_positions, controls=None):
         ''' No return
         Renders the field by calling plt.pause for the specified frame duration
         '''
-        self.plot_step(agent_positions)
+        self.plot_step(agent_positions, controls)
         plt.pause(self.frame_duration)
 
     def mp4_from_history(self, history, flag_positions, gif_dir):
